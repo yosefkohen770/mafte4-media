@@ -1,14 +1,43 @@
 name: WA Broadcast Cron
 on:
   schedule:
-    - cron: '*/5 * * * *'   # כל 5 דקות — ענן, עובד גם כשהמחשב כבוי
-  workflow_dispatch:          # הפעלה ידנית אם צריך
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
 
 jobs:
   check-and-send:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - name: Ping wa-cron
+      - name: Read state and act at exact time
         run: |
-          curl -s -X GET "https://mafte4.vercel.app/api/wa-cron" \
-            -H "Content-Type: application/json"
+          SVC="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZsdHdub3h0eHd2ZHl0eG94dndtIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NzI4Njg0NiwiZXhwIjoyMDkyODYyODQ2fQ.TbuYZ5kjz1JRa_c3NFhI5qLV9ooEKnKQV5nC_ycq3pw"
+          STATE=$(curl -s -H "apikey: $SVC" -H "Authorization: Bearer $SVC" \
+            "https://fltwnoxtxwvdytxoxvwm.supabase.co/storage/v1/object/wa-state/broadcast.json")
+          STATUS=$(echo "$STATE" | python3 -c "import sys,json; print(json.load(sys.stdin).get('status',''))" 2>/dev/null)
+          NOW=$(date +%s)
+          echo "Status: $STATUS, Now: $NOW"
+
+          if [ "$STATUS" = "pending_ask" ]; then
+            ASK_AT=$(echo "$STATE" | python3 -c "import sys,json; print(json.load(sys.stdin).get('ask_at',0))")
+            if [ "$NOW" -lt "$ASK_AT" ]; then
+              SLEEP=$((ASK_AT - NOW))
+              echo "Sleeping ${SLEEP}s until ask time..."
+              sleep $SLEEP
+            fi
+            curl -s "https://mafte4.vercel.app/api/wa-cron"
+            echo "Ask sent!"
+
+          elif [ "$STATUS" = "pending_send" ]; then
+            SEND_AT=$(echo "$STATE" | python3 -c "import sys,json; print(json.load(sys.stdin).get('send_at',0))")
+            if [ "$NOW" -lt "$SEND_AT" ]; then
+              SLEEP=$((SEND_AT - NOW))
+              echo "Sleeping ${SLEEP}s until send time..."
+              sleep $SLEEP
+            fi
+            curl -s "https://mafte4.vercel.app/api/wa-cron"
+            echo "Video sent!"
+
+          else
+            echo "Nothing to do (status=$STATUS)"
+          fi
