@@ -1,0 +1,14 @@
+name: WA Broadcast Cron
+on:
+  schedule:
+    - cron: '*/5 * * * *'   # כל 5 דקות — ענן, עובד גם כשהמחשב כבוי
+  workflow_dispatch:          # הפעלה ידנית אם צריך
+
+jobs:
+  check-and-send:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping wa-cron
+        run: |
+          curl -s -X GET "https://mafte4.vercel.app/api/wa-cron" \
+            -H "Content-Type: application/json"
